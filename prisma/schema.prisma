@@ -1,0 +1,37 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // needed for Neon serverless
+}
+
+model Bond {
+  id                    String     @id @default(cuid())
+  ticker                String     @unique
+  issuer                String
+  currency              String     @default("USD")
+  couponRate            Float      // annual coupon rate as decimal (e.g. 0.07 for 7%)
+  couponFrequency       Int        @default(2) // payments per year (1=annual, 2=semi, 4=quarterly)
+  firstCouponDate       DateTime
+  maturityDate          DateTime
+  amortizationType      String     @default("bullet") // "bullet" | "equal" | "custom"
+  amortStartDate        DateTime?  // for "equal" type
+  amortPayments         Int?       // for "equal" type
+  customAmortSchedule   String?    // JSON string for "custom" type: [{"date":"2028-06-30","pct":33.33},...]
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+  positions             Position[]
+}
+
+model Position {
+  id         String   @id @default(cuid())
+  bondId     String
+  nominal    Float
+  dirtyPrice Float    // as percentage of nominal (e.g. 105.5 means 105.5%)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  bond       Bond     @relation(fields: [bondId], references: [id], onDelete: Cascade)
+}
