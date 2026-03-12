@@ -14,6 +14,7 @@ export async function PUT(
       ticker: body.ticker?.toUpperCase(),
       issuer: body.issuer,
       currency: body.currency,
+      law: body.law,
       couponRate: body.couponRate,
       couponFrequency: body.couponFrequency,
       firstCouponDate: body.firstCouponDate ? new Date(body.firstCouponDate) : undefined,

@@ -8,6 +8,7 @@ interface BondFormData {
   ticker: string;
   issuer: string;
   currency: string;
+  law: string;
   couponRate: number;
   couponFrequency: number;
   firstCouponDate: string;
@@ -29,6 +30,7 @@ const EMPTY_FORM = {
   ticker: "",
   issuer: "",
   currency: "USD",
+  law: "NY",
   couponRate: "",
   couponFrequency: "2",
   firstCouponDate: "",
@@ -39,15 +41,22 @@ const EMPTY_FORM = {
   customAmortText: "",
 };
 
+function parseNumber(value: string): number {
+  // Handle both comma and dot as decimal separator
+  return parseFloat(value.replace(",", "."));
+}
+
 export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBond }: Props) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const resetForm = () => {
     setForm(EMPTY_FORM);
     setEditingId(null);
     setShowForm(false);
+    setError(null);
   };
 
   const startEdit = (bond: BondDTO) => {
@@ -61,6 +70,7 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
       ticker: bond.ticker,
       issuer: bond.issuer,
       currency: bond.currency,
+      law: bond.law || "NY",
       couponRate: (bond.couponRate * 100).toString(),
       couponFrequency: bond.couponFrequency.toString(),
       firstCouponDate: bond.firstCouponDate.slice(0, 10),
@@ -72,6 +82,7 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
     });
     setEditingId(bond.id);
     setShowForm(true);
+    setError(null);
   };
 
   const parseCustomAmort = (text: string): { date: string; pct: number }[] => {
@@ -81,16 +92,30 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
       .filter((line) => line.trim())
       .map((line) => {
         const [date, pct] = line.split(":").map((s) => s.trim());
-        return { date, pct: parseFloat(pct) };
+        return { date, pct: parseNumber(pct) };
       });
   };
 
   const handleSubmit = async () => {
-    const data = {
+    setError(null);
+
+    if (!form.ticker || !form.issuer || !form.firstCouponDate || !form.maturityDate) {
+      setError("Completá todos los campos obligatorios.");
+      return;
+    }
+
+    const couponRate = parseNumber(form.couponRate);
+    if (isNaN(couponRate) || couponRate <= 0) {
+      setError("El cupón anual debe ser un número válido mayor a 0.");
+      return;
+    }
+
+    const data: BondFormData = {
       ticker: form.ticker,
       issuer: form.issuer,
       currency: form.currency,
-      couponRate: parseFloat(form.couponRate) / 100,
+      law: form.law,
+      couponRate: couponRate / 100,
       couponFrequency: parseInt(form.couponFrequency),
       firstCouponDate: form.firstCouponDate,
       maturityDate: form.maturityDate,
@@ -103,18 +128,30 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
           : null,
     };
 
-    if (editingId) {
-      await onUpdateBond(editingId, data);
-    } else {
-      await onCreateBond(data);
+    try {
+      if (editingId) {
+        await onUpdateBond(editingId, data);
+      } else {
+        await onCreateBond(data);
+      }
+      resetForm();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Error al guardar";
+      setError(message);
     }
-    resetForm();
   };
 
   const amortLabel: Record<string, string> = {
     bullet: "Bullet",
     equal: "Cuotas Iguales",
     custom: "Custom",
+  };
+
+  const freqLabel: Record<number, string> = {
+    1: "Anual",
+    2: "Semestral",
+    4: "Trimestral",
+    12: "Mensual",
   };
 
   return (
@@ -139,6 +176,13 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
           <h4 className="mb-4 font-semibold text-slate-800">
             {editingId ? "Editar ON" : "Nueva ON"}
           </h4>
+
+          {error && (
+            <div className="mb-4 rounded border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             <Field label="Ticker" value={form.ticker} onChange={(v) => setForm({ ...form, ticker: v })} placeholder="YPF2026" />
             <Field label="Emisor" value={form.issuer} onChange={(v) => setForm({ ...form, issuer: v })} placeholder="YPF S.A." />
@@ -153,7 +197,37 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
                 <option value="ARS">ARS</option>
               </select>
             </div>
-            <Field label="Cupón Anual (%)" value={form.couponRate} onChange={(v) => setForm({ ...form, couponRate: v })} type="number" placeholder="8.5" />
+
+            {/* Ley */}
+            <div>
+              <label className="mb-1 block text-xs text-slate-500">Ley</label>
+              <div className="flex gap-1">
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, law: "NY" })}
+                  className={`flex-1 rounded border px-3 py-2 text-sm font-medium transition-colors ${
+                    form.law === "NY"
+                      ? "border-blue-600 bg-blue-600 text-white"
+                      : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  NY
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, law: "ARG" })}
+                  className={`flex-1 rounded border px-3 py-2 text-sm font-medium transition-colors ${
+                    form.law === "ARG"
+                      ? "border-blue-600 bg-blue-600 text-white"
+                      : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  ARG
+                </button>
+              </div>
+            </div>
+
+            <Field label="Cupón Anual (%)" value={form.couponRate} onChange={(v) => setForm({ ...form, couponRate: v })} placeholder="8.5" />
             <div>
               <label className="mb-1 block text-xs text-slate-500">Frecuencia Cupón</label>
               <select
@@ -230,6 +304,7 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
               <th className="px-4 py-3">Ticker</th>
               <th className="px-4 py-3">Emisor</th>
               <th className="px-4 py-3">Moneda</th>
+              <th className="px-4 py-3">Ley</th>
               <th className="px-4 py-3 text-right">Cupón</th>
               <th className="px-4 py-3">Frecuencia</th>
               <th className="px-4 py-3">Vencimiento</th>
@@ -240,7 +315,7 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
           <tbody>
             {bonds.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
                   No hay ONs cargadas. Creá una nueva.
                 </td>
               </tr>
@@ -250,16 +325,17 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
                 <td className="px-4 py-3 font-medium text-slate-900">{bond.ticker}</td>
                 <td className="px-4 py-3 text-slate-600">{bond.issuer}</td>
                 <td className="px-4 py-3">{bond.currency}</td>
-                <td className="px-4 py-3 text-right">{(bond.couponRate * 100).toFixed(1)}%</td>
                 <td className="px-4 py-3">
-                  {bond.couponFrequency === 1
-                    ? "Anual"
-                    : bond.couponFrequency === 2
-                    ? "Semestral"
-                    : bond.couponFrequency === 4
-                    ? "Trimestral"
-                    : "Mensual"}
+                  <span className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
+                    bond.law === "NY"
+                      ? "bg-blue-100 text-blue-700"
+                      : "bg-amber-100 text-amber-700"
+                  }`}>
+                    {bond.law || "NY"}
+                  </span>
                 </td>
+                <td className="px-4 py-3 text-right">{(bond.couponRate * 100).toFixed(1)}%</td>
+                <td className="px-4 py-3">{freqLabel[bond.couponFrequency] || `${bond.couponFrequency}x`}</td>
                 <td className="px-4 py-3">{formatDate(bond.maturityDate)}</td>
                 <td className="px-4 py-3">{amortLabel[bond.amortizationType] || bond.amortizationType}</td>
                 <td className="px-4 py-3 text-center">

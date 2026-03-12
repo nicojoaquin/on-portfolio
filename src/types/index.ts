@@ -3,6 +3,7 @@ export interface BondDTO {
   ticker: string;
   issuer: string;
   currency: string;
+  law: string;
   couponRate: number;
   couponFrequency: number;
   firstCouponDate: string;
