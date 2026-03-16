@@ -10,7 +10,11 @@ import {
 } from "@/lib/financial";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 
-function toBondParams(bond: PositionDTO["bond"]): BondParams {
+function toBondParams(bond: PositionDTO["bond"]): BondParams | null {
+  if (!bond.hasTerms || !bond.couponRate || !bond.couponFrequency || !bond.firstCouponDate || !bond.maturityDate) {
+    return null;
+  }
+
   const customAmort: AmortScheduleEntry[] = bond.customAmortSchedule
     ? JSON.parse(bond.customAmortSchedule)
     : [];
@@ -34,11 +38,13 @@ interface Props {
 
 export default function CouponsTab({ positions }: Props) {
   const result = useMemo(() => {
-    const portfolioPositions: PortfolioPosition[] = positions.map((p) => ({
-      bond: toBondParams(p.bond),
-      nominal: p.nominal,
-      dirtyPrice: p.dirtyPrice,
-    }));
+    const portfolioPositions: PortfolioPosition[] = positions
+      .filter((p) => toBondParams(p.bond) !== null)
+      .map((p) => ({
+        bond: toBondParams(p.bond)!,
+        nominal: p.nominal,
+        dirtyPrice: p.dirtyPrice,
+      }));
     return calculatePortfolio(portfolioPositions);
   }, [positions]);
 

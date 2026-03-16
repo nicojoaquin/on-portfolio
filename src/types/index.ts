@@ -4,10 +4,10 @@ export interface BondDTO {
   issuer: string;
   currency: string;
   law: string;
-  couponRate: number;
-  couponFrequency: number;
-  firstCouponDate: string;
-  maturityDate: string;
+  couponRate: number | null;
+  couponFrequency: number | null;
+  firstCouponDate: string | null;
+  maturityDate: string | null;
   amortizationType: string;
   amortStartDate: string | null;
   amortPayments: number | null;
@@ -16,6 +16,7 @@ export interface BondDTO {
   creditRating: string | null;
   lastPrice: number | null;
   lastPriceDate: string | null;
+  hasTerms: boolean;
 }
 
 export interface PositionDTO {

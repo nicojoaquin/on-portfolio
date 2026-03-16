@@ -12,19 +12,14 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    if (!body.ticker || !body.issuer || !body.firstCouponDate || !body.maturityDate) {
+    if (!body.ticker || !body.issuer) {
       return NextResponse.json(
-        { error: "Faltan campos obligatorios: ticker, emisor, fecha primer cupón, vencimiento" },
+        { error: "Faltan campos obligatorios: ticker, emisor" },
         { status: 400 }
       );
     }
 
-    if (typeof body.couponRate !== "number" || isNaN(body.couponRate)) {
-      return NextResponse.json(
-        { error: "Cupón anual inválido" },
-        { status: 400 }
-      );
-    }
+    const hasTerms = !!(body.couponRate && body.firstCouponDate && body.maturityDate);
 
     const bond = await prisma.bond.create({
       data: {
@@ -32,10 +27,10 @@ export async function POST(request: NextRequest) {
         issuer: body.issuer,
         currency: body.currency || "USD",
         law: body.law || "NY",
-        couponRate: body.couponRate,
-        couponFrequency: body.couponFrequency || 2,
-        firstCouponDate: new Date(body.firstCouponDate),
-        maturityDate: new Date(body.maturityDate),
+        couponRate: body.couponRate ?? null,
+        couponFrequency: body.couponFrequency || (hasTerms ? 2 : null),
+        firstCouponDate: body.firstCouponDate ? new Date(body.firstCouponDate) : null,
+        maturityDate: body.maturityDate ? new Date(body.maturityDate) : null,
         amortizationType: body.amortizationType || "bullet",
         amortStartDate: body.amortStartDate ? new Date(body.amortStartDate) : null,
         amortPayments: body.amortPayments || null,
@@ -44,6 +39,7 @@ export async function POST(request: NextRequest) {
           : null,
         minDenomination: body.minDenomination ?? null,
         creditRating: body.creditRating ?? null,
+        hasTerms,
       },
     });
 

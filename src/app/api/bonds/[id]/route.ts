@@ -8,6 +8,8 @@ export async function PUT(
   const { id } = await params;
   const body = await request.json();
 
+  const hasTerms = !!(body.couponRate && body.firstCouponDate && body.maturityDate);
+
   const bond = await prisma.bond.update({
     where: { id },
     data: {
@@ -15,10 +17,10 @@ export async function PUT(
       issuer: body.issuer,
       currency: body.currency,
       law: body.law,
-      couponRate: body.couponRate,
-      couponFrequency: body.couponFrequency,
-      firstCouponDate: body.firstCouponDate ? new Date(body.firstCouponDate) : undefined,
-      maturityDate: body.maturityDate ? new Date(body.maturityDate) : undefined,
+      couponRate: body.couponRate ?? null,
+      couponFrequency: body.couponFrequency ?? null,
+      firstCouponDate: body.firstCouponDate ? new Date(body.firstCouponDate) : null,
+      maturityDate: body.maturityDate ? new Date(body.maturityDate) : null,
       amortizationType: body.amortizationType,
       amortStartDate: body.amortStartDate ? new Date(body.amortStartDate) : null,
       amortPayments: body.amortPayments ?? null,
@@ -27,6 +29,7 @@ export async function PUT(
         : null,
       minDenomination: body.minDenomination ?? null,
       creditRating: body.creditRating ?? null,
+      hasTerms,
     },
   });
 

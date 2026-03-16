@@ -5,7 +5,6 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
 }
 
 model Bond {
@@ -14,11 +13,12 @@ model Bond {
   issuer                String
   currency              String     @default("USD")
   law                   String     @default("NY") // "NY" | "ARG"
-  couponRate            Float      // annual coupon rate as decimal (e.g. 0.07 for 7%)
-  couponFrequency       Int        @default(2) // payments per year (1=annual, 2=semi, 4=quarterly)
-  firstCouponDate       DateTime
-  maturityDate          DateTime
+  couponRate            Float?     // annual coupon rate as decimal (e.g. 0.07 for 7%)
+  couponFrequency       Int?       @default(2) // payments per year (1=annual, 2=semi, 4=quarterly)
+  firstCouponDate       DateTime?
+  maturityDate          DateTime?
   amortizationType      String     @default("bullet") // "bullet" | "equal" | "custom"
+  hasTerms              Boolean    @default(false) // true when bond terms are fully loaded
   amortStartDate        DateTime?  // for "equal" type
   amortPayments         Int?       // for "equal" type
   customAmortSchedule   String?    // JSON string for "custom" type: [{"date":"2028-06-30","pct":33.33},...]

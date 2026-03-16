@@ -276,6 +276,7 @@ async function main() {
         amortPayments: bond.amortPayments || null,
         minDenomination: bond.minDenomination,
         creditRating: bond.creditRating,
+        hasTerms: true,
       },
       create: {
         ticker: bond.ticker,

@@ -72,6 +72,7 @@ export default function Home() {
           onUpdateBond={updateBond}
           onDeleteBond={deleteBond}
           onRefreshQuotes={refreshQuotes}
+          onImportComplete={refetchBonds}
         />
       )}
     </div>

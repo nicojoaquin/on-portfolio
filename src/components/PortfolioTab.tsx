@@ -12,7 +12,11 @@ import { formatCurrency, formatPercent, formatDate, formatNumber } from "@/lib/f
 import YieldCurveChart from "./YieldCurveChart";
 import DistributionCharts from "./DistributionCharts";
 
-function toBondParams(bond: BondDTO): BondParams {
+function toBondParams(bond: BondDTO): BondParams | null {
+  if (!bond.hasTerms || !bond.couponRate || !bond.couponFrequency || !bond.firstCouponDate || !bond.maturityDate) {
+    return null;
+  }
+
   const customAmort: AmortScheduleEntry[] = bond.customAmortSchedule
     ? JSON.parse(bond.customAmortSchedule)
     : [];
@@ -68,19 +72,36 @@ export default function PortfolioTab({
   };
 
   const portfolioResult = useMemo(() => {
-    const portfolioPositions: PortfolioPosition[] = positions.map((p) => ({
-      bond: toBondParams(p.bond),
-      nominal: p.nominal,
-      dirtyPrice: p.dirtyPrice,
-    }));
+    const portfolioPositions: PortfolioPosition[] = positions
+      .filter((p) => toBondParams(p.bond) !== null)
+      .map((p) => ({
+        bond: toBondParams(p.bond)!,
+        nominal: p.nominal,
+        dirtyPrice: p.dirtyPrice,
+      }));
     return calculatePortfolio(portfolioPositions);
+  }, [positions]);
+
+  // Map position index to portfolio result index (only positions with terms)
+  const positionResultMap = useMemo(() => {
+    const map = new Map<number, number>();
+    let resultIdx = 0;
+    for (let i = 0; i < positions.length; i++) {
+      if (toBondParams(positions[i].bond) !== null) {
+        map.set(i, resultIdx);
+        resultIdx++;
+      }
+    }
+    return map;
   }, [positions]);
 
   const yieldCurveData = useMemo(() => {
     return positions
       .map((pos, idx) => {
-        const result = portfolioResult.positionResults[idx];
-        if (!result || result.tir === null) return null;
+        const resultIdx = positionResultMap.get(idx);
+        if (resultIdx === undefined) return null;
+        const result = portfolioResult.positionResults[resultIdx];
+        if (!result || result.tir === null || !pos.bond.maturityDate) return null;
         return {
           ticker: pos.bond.ticker,
           yearsToMaturity: yearsToMaturity(pos.bond.maturityDate),
@@ -88,18 +109,24 @@ export default function PortfolioTab({
         };
       })
       .filter((d): d is NonNullable<typeof d> => d !== null);
-  }, [positions, portfolioResult]);
+  }, [positions, portfolioResult, positionResultMap]);
 
   const distributionData = useMemo(() => {
-    return positions.map((pos, idx) => ({
-      ticker: pos.bond.ticker,
-      issuer: pos.bond.issuer,
-      currency: pos.bond.currency,
-      law: pos.bond.law,
-      marketValue: portfolioResult.positionResults[idx]?.marketValue || 0,
-      creditRating: pos.bond.creditRating,
-    }));
-  }, [positions, portfolioResult]);
+    return positions.map((pos, idx) => {
+      const resultIdx = positionResultMap.get(idx);
+      const marketValue = resultIdx !== undefined
+        ? portfolioResult.positionResults[resultIdx]?.marketValue || 0
+        : pos.nominal * (pos.dirtyPrice / 100);
+      return {
+        ticker: pos.bond.ticker,
+        issuer: pos.bond.issuer,
+        currency: pos.bond.currency,
+        law: pos.bond.law,
+        marketValue,
+        creditRating: pos.bond.creditRating,
+      };
+    });
+  }, [positions, portfolioResult, positionResultMap]);
 
   const handleAdd = async () => {
     if (!selectedBondId || !nominal || !dirtyPrice) return;
@@ -279,7 +306,8 @@ export default function PortfolioTab({
               </tr>
             )}
             {positions.map((pos, idx) => {
-              const result = portfolioResult.positionResults[idx];
+              const resultIdx = positionResultMap.get(idx);
+              const result = resultIdx !== undefined ? portfolioResult.positionResults[resultIdx] : null;
               const isEditing = editingId === pos.id;
 
               return (

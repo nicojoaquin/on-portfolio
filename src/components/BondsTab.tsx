@@ -27,6 +27,7 @@ interface Props {
   onUpdateBond: (id: string, bond: BondFormData) => Promise<void>;
   onDeleteBond: (id: string) => Promise<void>;
   onRefreshQuotes: () => Promise<void>;
+  onImportComplete: () => Promise<void>;
 }
 
 const EMPTY_FORM = {
@@ -50,12 +51,14 @@ function parseNumber(value: string): number {
   return parseFloat(value.replace(",", "."));
 }
 
-export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBond, onRefreshQuotes }: Props) {
+export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBond, onRefreshQuotes, onImportComplete }: Props) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<string | null>(null);
 
   const resetForm = () => {
     setForm(EMPTY_FORM);
@@ -76,10 +79,10 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
       issuer: bond.issuer,
       currency: bond.currency,
       law: bond.law || "NY",
-      couponRate: (bond.couponRate * 100).toString(),
-      couponFrequency: bond.couponFrequency.toString(),
-      firstCouponDate: bond.firstCouponDate.slice(0, 10),
-      maturityDate: bond.maturityDate.slice(0, 10),
+      couponRate: bond.couponRate != null ? (bond.couponRate * 100).toString() : "",
+      couponFrequency: bond.couponFrequency?.toString() || "2",
+      firstCouponDate: bond.firstCouponDate?.slice(0, 10) || "",
+      maturityDate: bond.maturityDate?.slice(0, 10) || "",
       amortizationType: bond.amortizationType,
       amortStartDate: bond.amortStartDate?.slice(0, 10) || "",
       amortPayments: bond.amortPayments?.toString() || "",
@@ -106,13 +109,13 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
   const handleSubmit = async () => {
     setError(null);
 
-    if (!form.ticker || !form.issuer || !form.firstCouponDate || !form.maturityDate) {
-      setError("Completá todos los campos obligatorios.");
+    if (!form.ticker || !form.issuer) {
+      setError("Completá ticker y emisor como mínimo.");
       return;
     }
 
-    const couponRate = parseNumber(form.couponRate);
-    if (isNaN(couponRate) || couponRate <= 0) {
+    const couponRate = form.couponRate ? parseNumber(form.couponRate) : null;
+    if (couponRate !== null && (isNaN(couponRate) || couponRate <= 0)) {
       setError("El cupón anual debe ser un número válido mayor a 0.");
       return;
     }
@@ -122,10 +125,10 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
       issuer: form.issuer,
       currency: form.currency,
       law: form.law,
-      couponRate: couponRate / 100,
+      couponRate: couponRate !== null ? couponRate / 100 : 0,
       couponFrequency: parseInt(form.couponFrequency),
-      firstCouponDate: form.firstCouponDate,
-      maturityDate: form.maturityDate,
+      firstCouponDate: form.firstCouponDate || "",
+      maturityDate: form.maturityDate || "",
       amortizationType: form.amortizationType,
       amortStartDate: form.amortStartDate || null,
       amortPayments: form.amortPayments ? parseInt(form.amortPayments) : null,
@@ -159,6 +162,30 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
     }
   };
 
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/import", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) {
+        setImportResult(`Error: ${data.error}`);
+      } else {
+        setImportResult(`Importados: ${data.created} nuevos, ${data.updated} actualizados, ${data.skipped} omitidos`);
+        await onImportComplete();
+      }
+    } catch {
+      setImportResult("Error al importar archivo");
+    } finally {
+      setImporting(false);
+      e.target.value = "";
+    }
+  };
+
   const amortLabel: Record<string, string> = {
     bullet: "Bullet",
     equal: "Cuotas Iguales",
@@ -186,6 +213,10 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
           >
             {refreshing ? "Actualizando..." : "Actualizar Cotizaciones"}
           </button>
+          <label className={`cursor-pointer rounded border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 ${importing ? "opacity-50 pointer-events-none" : ""}`}>
+            {importing ? "Importando..." : "Importar Excel"}
+            <input type="file" accept=".xlsx,.xls,.csv" onChange={handleImport} className="hidden" />
+          </label>
           {!showForm && (
             <button
               onClick={() => setShowForm(true)}
@@ -196,6 +227,14 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
           )}
         </div>
       </div>
+
+      {/* Import result */}
+      {importResult && (
+        <div className={`rounded border px-4 py-2 text-sm ${importResult.startsWith("Error") ? "border-red-200 bg-red-50 text-red-700" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+          {importResult}
+          <button onClick={() => setImportResult(null)} className="ml-2 text-xs underline">Cerrar</button>
+        </div>
+      )}
 
       {/* Form */}
       {showForm && (
@@ -346,7 +385,12 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
             )}
             {bonds.map((bond) => (
               <tr key={bond.id} className="border-b border-slate-100 hover:bg-slate-50">
-                <td className="px-4 py-3 font-medium text-slate-900">{bond.ticker}</td>
+                <td className="px-4 py-3 font-medium text-slate-900">
+                  {bond.ticker}
+                  {!bond.hasTerms && (
+                    <span className="ml-1 inline-block rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">Sin datos</span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-slate-600">{bond.issuer}</td>
                 <td className="px-4 py-3">{bond.currency}</td>
                 <td className="px-4 py-3">
@@ -358,9 +402,15 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
                     {bond.law || "NY"}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-right">{(bond.couponRate * 100).toFixed(1)}%</td>
-                <td className="px-4 py-3">{freqLabel[bond.couponFrequency] || `${bond.couponFrequency}x`}</td>
-                <td className="px-4 py-3">{formatDate(bond.maturityDate)}</td>
+                <td className="px-4 py-3 text-right">
+                  {bond.couponRate != null ? `${(bond.couponRate * 100).toFixed(1)}%` : <span className="text-slate-400">—</span>}
+                </td>
+                <td className="px-4 py-3">
+                  {bond.couponFrequency != null ? (freqLabel[bond.couponFrequency] || `${bond.couponFrequency}x`) : <span className="text-slate-400">—</span>}
+                </td>
+                <td className="px-4 py-3">
+                  {bond.maturityDate ? formatDate(bond.maturityDate) : <span className="text-slate-400">—</span>}
+                </td>
                 <td className="px-4 py-3">{amortLabel[bond.amortizationType] || bond.amortizationType}</td>
                 <td className="px-4 py-3 text-right">
                   {bond.minDenomination != null

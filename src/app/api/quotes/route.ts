@@ -74,27 +74,59 @@ export async function GET() {
   for (const q of bolsarQuotes) quoteMap.set(q.ticker, q.lastPrice);
   for (const q of iolQuotes) quoteMap.set(q.ticker, q.lastPrice);
 
-  // Match and update bonds in DB
-  const bonds = await prisma.bond.findMany();
-  const matched: { ticker: string; price: number | null; updated: boolean }[] = [];
+  // Get existing bonds indexed by ticker
+  const existingBonds = await prisma.bond.findMany();
+  const existingTickers = new Set(existingBonds.map((b) => b.ticker));
 
-  for (const bond of bonds) {
+  let updated = 0;
+  let created = 0;
+
+  // Update existing bonds with new prices
+  for (const bond of existingBonds) {
     const price = quoteMap.get(bond.ticker);
     if (price !== undefined) {
       await prisma.bond.update({
         where: { id: bond.id },
         data: { lastPrice: price, lastPriceDate: new Date() },
       });
-      matched.push({ ticker: bond.ticker, price, updated: true });
-    } else {
-      matched.push({ ticker: bond.ticker, price: bond.lastPrice, updated: false });
+      updated++;
     }
+  }
+
+  // Auto-create new bonds from scraped data (ticker + price only, no terms)
+  const newBonds: { ticker: string; price: number }[] = [];
+  for (const [ticker, price] of quoteMap) {
+    if (!existingTickers.has(ticker)) {
+      newBonds.push({ ticker, price });
+    }
+  }
+
+  if (newBonds.length > 0) {
+    await prisma.bond.createMany({
+      data: newBonds.map((b) => ({
+        ticker: b.ticker,
+        issuer: extractIssuer(b.ticker),
+        lastPrice: b.price,
+        lastPriceDate: new Date(),
+        hasTerms: false,
+      })),
+      skipDuplicates: true,
+    });
+    created = newBonds.length;
   }
 
   return NextResponse.json({
     totalScraped: quoteMap.size,
-    matchedBonds: matched.filter((m) => m.updated).length,
-    quotes: matched,
+    updated,
+    created,
+    total: existingBonds.length + created,
     sources: ["iol.invertironline.com", "bolsar.info"],
   });
+}
+
+/** Extract a rough issuer name from ticker (e.g. "YPF2026" -> "YPF", "MGCHO" -> "MGC") */
+function extractIssuer(ticker: string): string {
+  // Remove trailing numbers, common suffixes like D, C, O
+  const match = ticker.match(/^([A-Z]{2,6})/);
+  return match ? match[1] : ticker;
 }
