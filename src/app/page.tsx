@@ -57,7 +57,6 @@ export default function Home() {
       {activeTab === "portfolio" && (
         <PortfolioTab
           positions={positions}
-          bonds={bondsHook.bonds}
           onAddPosition={addPosition}
           onUpdatePosition={updatePosition}
           onDeletePosition={deletePosition}

@@ -11,6 +11,7 @@ import {
 import { formatCurrency, formatPercent, formatDate, formatNumber } from "@/lib/formatters";
 import YieldCurveChart from "./YieldCurveChart";
 import DistributionCharts from "./DistributionCharts";
+import BondSearch from "./BondSearch";
 
 function toBondParams(bond: BondDTO): BondParams | null {
   if (!bond.hasTerms || !bond.couponRate || !bond.couponFrequency || !bond.firstCouponDate || !bond.maturityDate) {
@@ -42,7 +43,6 @@ function yearsToMaturity(maturityDate: string): number {
 
 interface Props {
   positions: PositionDTO[];
-  bonds: BondDTO[];
   onAddPosition: (data: { bondId: string; nominal: number; dirtyPrice: number }) => Promise<void>;
   onUpdatePosition: (id: string, data: { nominal?: number; dirtyPrice?: number }) => Promise<void>;
   onDeletePosition: (id: string) => Promise<void>;
@@ -51,13 +51,12 @@ interface Props {
 
 export default function PortfolioTab({
   positions,
-  bonds,
   onAddPosition,
   onUpdatePosition,
   onDeletePosition,
   onClearAll,
 }: Props) {
-  const [selectedBondId, setSelectedBondId] = useState("");
+  const [selectedBond, setSelectedBond] = useState<BondDTO | null>(null);
   const [nominal, setNominal] = useState("");
   const [dirtyPrice, setDirtyPrice] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -65,11 +64,6 @@ export default function PortfolioTab({
   const [editDirty, setEditDirty] = useState("");
   const [exporting, setExporting] = useState(false);
   const [clearing, setClearing] = useState(false);
-
-  const handleBondSelect = (bondId: string) => {
-    setSelectedBondId(bondId);
-    setDirtyPrice("");
-  };
 
   const portfolioResult = useMemo(() => {
     const portfolioPositions: PortfolioPosition[] = positions
@@ -129,13 +123,13 @@ export default function PortfolioTab({
   }, [positions, portfolioResult, positionResultMap]);
 
   const handleAdd = async () => {
-    if (!selectedBondId || !nominal || !dirtyPrice) return;
+    if (!selectedBond || !nominal || !dirtyPrice) return;
     await onAddPosition({
-      bondId: selectedBondId,
+      bondId: selectedBond.id,
       nominal: parseFloat(nominal),
       dirtyPrice: parseFloat(dirtyPrice),
     });
-    setSelectedBondId("");
+    setSelectedBond(null);
     setNominal("");
     setDirtyPrice("");
   };
@@ -235,21 +229,9 @@ export default function PortfolioTab({
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         <h3 className="mb-3 text-sm font-semibold text-slate-700">Agregar Posición</h3>
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-[180px] flex-1">
+          <div className="min-w-[240px] flex-1">
             <label className="mb-1 block text-xs text-slate-500">Especie</label>
-            <select
-              value={selectedBondId}
-              onChange={(e) => handleBondSelect(e.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
-            >
-              <option value="">Seleccionar...</option>
-              {bonds.map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.ticker} — {b.issuer}
-                  {b.lastPrice ? ` (ARS ${b.lastPrice.toLocaleString("es-AR")})` : ""}
-                </option>
-              ))}
-            </select>
+            <BondSearch value={selectedBond} onChange={setSelectedBond} />
           </div>
           <div className="w-32">
             <label className="mb-1 block text-xs text-slate-500">Nominal</label>
@@ -274,7 +256,7 @@ export default function PortfolioTab({
           </div>
           <button
             onClick={handleAdd}
-            disabled={!selectedBondId || !nominal || !dirtyPrice}
+            disabled={!selectedBond || !nominal || !dirtyPrice}
             className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-40"
           >
             Agregar
