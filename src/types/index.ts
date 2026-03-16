@@ -35,4 +35,20 @@ export interface MarketQuote {
   tir: number | null;
 }
 
+export interface BondFilters {
+  search: string;
+  currency: string;
+  law: string;
+  hasTerms: string;
+  withPrice: string;
+}
+
+export interface PaginatedBonds {
+  data: BondDTO[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
 export type TabId = "portfolio" | "coupons" | "bonds";

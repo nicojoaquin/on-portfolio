@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { BondDTO } from "@/types";
+import { useState, useRef } from "react";
+import { BondDTO, BondFilters } from "@/types";
 import { formatDate } from "@/lib/formatters";
 
 interface BondFormData {
@@ -23,6 +23,14 @@ interface BondFormData {
 
 interface Props {
   bonds: BondDTO[];
+  total: number;
+  page: number;
+  totalPages: number;
+  filters: BondFilters;
+  loading: boolean;
+  onGoToPage: (page: number) => void;
+  onUpdateFilters: (filters: Partial<BondFilters>) => void;
+  onResetFilters: () => void;
   onCreateBond: (bond: BondFormData) => Promise<void>;
   onUpdateBond: (id: string, bond: BondFormData) => Promise<void>;
   onDeleteBond: (id: string) => Promise<void>;
@@ -51,7 +59,11 @@ function parseNumber(value: string): number {
   return parseFloat(value.replace(",", "."));
 }
 
-export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBond, onRefreshQuotes, onImportComplete }: Props) {
+export default function BondsTab({
+  bonds, total, page, totalPages, filters, loading,
+  onGoToPage, onUpdateFilters, onResetFilters,
+  onCreateBond, onUpdateBond, onDeleteBond, onRefreshQuotes, onImportComplete,
+}: Props) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
@@ -59,6 +71,7 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
   const [refreshing, setRefreshing] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<string | null>(null);
+  const searchTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const resetForm = () => {
     setForm(EMPTY_FORM);
@@ -186,6 +199,15 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
     }
   };
 
+  const handleSearchChange = (value: string) => {
+    clearTimeout(searchTimeout.current);
+    searchTimeout.current = setTimeout(() => {
+      onUpdateFilters({ search: value });
+    }, 300);
+  };
+
+  const hasActiveFilters = filters.currency || filters.law || filters.hasTerms || filters.withPrice;
+
   const amortLabel: Record<string, string> = {
     bullet: "Bullet",
     equal: "Cuotas Iguales",
@@ -200,29 +222,102 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      {/* Header row */}
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-slate-700">
-          Base de Obligaciones Negociables ({bonds.length})
+          Base de Obligaciones Negociables ({total})
         </h3>
         <div className="flex gap-2">
           <button
             onClick={handleRefresh}
             disabled={refreshing}
-            className="rounded border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+            className="rounded border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
           >
             {refreshing ? "Actualizando..." : "Actualizar Cotizaciones"}
           </button>
-          <label className={`cursor-pointer rounded border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 ${importing ? "opacity-50 pointer-events-none" : ""}`}>
+          <label className={`cursor-pointer rounded border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100 ${importing ? "opacity-50 pointer-events-none" : ""}`}>
             {importing ? "Importando..." : "Importar Excel"}
             <input type="file" accept=".xlsx,.xls,.csv" onChange={handleImport} className="hidden" />
           </label>
           {!showForm && (
             <button
               onClick={() => setShowForm(true)}
-              className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              className="rounded bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
             >
               + Nueva ON
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Search + Filters */}
+      <div className="rounded-lg border border-slate-200 bg-white p-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[240px] flex-1">
+            <label className="mb-1 block text-xs text-slate-500">Buscar</label>
+            <input
+              type="text"
+              defaultValue={filters.search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Ticker o emisor..."
+              className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            />
+          </div>
+          <div className="w-28">
+            <label className="mb-1 block text-xs text-slate-500">Moneda</label>
+            <select
+              value={filters.currency}
+              onChange={(e) => onUpdateFilters({ currency: e.target.value })}
+              className="w-full rounded border border-slate-300 px-2 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">Todas</option>
+              <option value="USD">USD</option>
+              <option value="ARS">ARS</option>
+            </select>
+          </div>
+          <div className="w-28">
+            <label className="mb-1 block text-xs text-slate-500">Ley</label>
+            <select
+              value={filters.law}
+              onChange={(e) => onUpdateFilters({ law: e.target.value })}
+              className="w-full rounded border border-slate-300 px-2 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">Todas</option>
+              <option value="NY">NY</option>
+              <option value="ARG">ARG</option>
+            </select>
+          </div>
+          <div className="w-36">
+            <label className="mb-1 block text-xs text-slate-500">Datos</label>
+            <select
+              value={filters.hasTerms}
+              onChange={(e) => onUpdateFilters({ hasTerms: e.target.value })}
+              className="w-full rounded border border-slate-300 px-2 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">Todos</option>
+              <option value="true">Con datos</option>
+              <option value="false">Sin datos</option>
+            </select>
+          </div>
+          <div className="w-36">
+            <label className="mb-1 block text-xs text-slate-500">Cotización</label>
+            <select
+              value={filters.withPrice}
+              onChange={(e) => onUpdateFilters({ withPrice: e.target.value })}
+              className="w-full rounded border border-slate-300 px-2 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            >
+              <option value="">Todos</option>
+              <option value="true">Con precio</option>
+              <option value="false">Sin precio</option>
+            </select>
+          </div>
+          {hasActiveFilters && (
+            <button
+              onClick={onResetFilters}
+              className="rounded border border-slate-300 px-3 py-2 text-xs text-slate-600 hover:bg-slate-50"
+            >
+              Limpiar filtros
             </button>
           )}
         </div>
@@ -358,6 +453,9 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
 
       {/* Bonds table */}
       <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+        {loading && (
+          <div className="px-4 py-3 text-center text-xs text-slate-400">Cargando...</div>
+        )}
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -376,10 +474,12 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
             </tr>
           </thead>
           <tbody>
-            {bonds.length === 0 && (
+            {!loading && bonds.length === 0 && (
               <tr>
                 <td colSpan={12} className="px-4 py-8 text-center text-slate-400">
-                  No hay ONs cargadas. Creá una nueva.
+                  {filters.search || hasActiveFilters
+                    ? "No se encontraron ONs con esos filtros."
+                    : "No hay ONs cargadas. Creá una nueva."}
                 </td>
               </tr>
             )}
@@ -454,8 +554,69 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <Pagination page={page} totalPages={totalPages} onGoToPage={onGoToPage} />
+      )}
     </div>
   );
+}
+
+function Pagination({ page, totalPages, onGoToPage }: { page: number; totalPages: number; onGoToPage: (p: number) => void }) {
+  const pages = getPageNumbers(page, totalPages);
+
+  return (
+    <div className="flex items-center justify-center gap-1">
+      <button
+        onClick={() => onGoToPage(page - 1)}
+        disabled={page <= 1}
+        className="rounded border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+      >
+        Anterior
+      </button>
+      {pages.map((p, i) =>
+        p === "..." ? (
+          <span key={`dots-${i}`} className="px-2 text-xs text-slate-400">...</span>
+        ) : (
+          <button
+            key={p}
+            onClick={() => onGoToPage(p as number)}
+            className={`rounded border px-3 py-1.5 text-xs font-medium ${
+              p === page
+                ? "border-blue-600 bg-blue-600 text-white"
+                : "border-slate-300 text-slate-600 hover:bg-slate-50"
+            }`}
+          >
+            {p}
+          </button>
+        )
+      )}
+      <button
+        onClick={() => onGoToPage(page + 1)}
+        disabled={page >= totalPages}
+        className="rounded border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+      >
+        Siguiente
+      </button>
+    </div>
+  );
+}
+
+function getPageNumbers(current: number, total: number): (number | "...")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+
+  const pages: (number | "...")[] = [1];
+  if (current > 3) pages.push("...");
+
+  const start = Math.max(2, current - 1);
+  const end = Math.min(total - 1, current + 1);
+  for (let i = start; i <= end; i++) pages.push(i);
+
+  if (current < total - 2) pages.push("...");
+  pages.push(total);
+
+  return pages;
 }
 
 function Field({

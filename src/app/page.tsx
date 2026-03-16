@@ -16,12 +16,12 @@ const TABS: { id: TabId; label: string }[] = [
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabId>("portfolio");
-  const { bonds, createBond, updateBond, deleteBond, refetch: refetchBonds } = useBonds();
+  const bondsHook = useBonds();
   const { positions, addPosition, updatePosition, deletePosition, clearAll } = usePositions();
 
   const refreshQuotes = async () => {
     await fetch("/api/quotes");
-    await refetchBonds();
+    await bondsHook.refetch();
   };
 
   return (
@@ -57,7 +57,7 @@ export default function Home() {
       {activeTab === "portfolio" && (
         <PortfolioTab
           positions={positions}
-          bonds={bonds}
+          bonds={bondsHook.bonds}
           onAddPosition={addPosition}
           onUpdatePosition={updatePosition}
           onDeletePosition={deletePosition}
@@ -67,12 +67,20 @@ export default function Home() {
       {activeTab === "coupons" && <CouponsTab positions={positions} />}
       {activeTab === "bonds" && (
         <BondsTab
-          bonds={bonds}
-          onCreateBond={createBond}
-          onUpdateBond={updateBond}
-          onDeleteBond={deleteBond}
+          bonds={bondsHook.bonds}
+          total={bondsHook.total}
+          page={bondsHook.page}
+          totalPages={bondsHook.totalPages}
+          filters={bondsHook.filters}
+          loading={bondsHook.loading}
+          onGoToPage={bondsHook.goToPage}
+          onUpdateFilters={bondsHook.updateFilters}
+          onResetFilters={bondsHook.resetFilters}
+          onCreateBond={bondsHook.createBond}
+          onUpdateBond={bondsHook.updateBond}
+          onDeleteBond={bondsHook.deleteBond}
           onRefreshQuotes={refreshQuotes}
-          onImportComplete={refetchBonds}
+          onImportComplete={bondsHook.refetch}
         />
       )}
     </div>
