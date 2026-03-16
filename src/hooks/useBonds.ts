@@ -16,7 +16,7 @@ export function useBonds() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [limit] = useState(50);
+  const [limit] = useState(20);
   const [filters, setFilters] = useState<BondFilters>(DEFAULT_FILTERS);
   const [loading, setLoading] = useState(true);
 
