@@ -9,6 +9,8 @@ import {
   AmortScheduleEntry,
 } from "@/lib/financial";
 import { formatCurrency, formatPercent, formatDate, formatNumber } from "@/lib/formatters";
+import YieldCurveChart from "./YieldCurveChart";
+import DistributionCharts from "./DistributionCharts";
 
 function toBondParams(bond: BondDTO): BondParams {
   const customAmort: AmortScheduleEntry[] = bond.customAmortSchedule
@@ -28,12 +30,19 @@ function toBondParams(bond: BondDTO): BondParams {
   };
 }
 
+function yearsToMaturity(maturityDate: string): number {
+  const now = new Date();
+  const mat = new Date(maturityDate);
+  return (mat.getTime() - now.getTime()) / (365.25 * 86_400_000);
+}
+
 interface Props {
   positions: PositionDTO[];
   bonds: BondDTO[];
   onAddPosition: (data: { bondId: string; nominal: number; dirtyPrice: number }) => Promise<void>;
   onUpdatePosition: (id: string, data: { nominal?: number; dirtyPrice?: number }) => Promise<void>;
   onDeletePosition: (id: string) => Promise<void>;
+  onClearAll: () => Promise<void>;
 }
 
 export default function PortfolioTab({
@@ -42,6 +51,7 @@ export default function PortfolioTab({
   onAddPosition,
   onUpdatePosition,
   onDeletePosition,
+  onClearAll,
 }: Props) {
   const [selectedBondId, setSelectedBondId] = useState("");
   const [nominal, setNominal] = useState("");
@@ -49,6 +59,13 @@ export default function PortfolioTab({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editNominal, setEditNominal] = useState("");
   const [editDirty, setEditDirty] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [clearing, setClearing] = useState(false);
+
+  const handleBondSelect = (bondId: string) => {
+    setSelectedBondId(bondId);
+    setDirtyPrice("");
+  };
 
   const portfolioResult = useMemo(() => {
     const portfolioPositions: PortfolioPosition[] = positions.map((p) => ({
@@ -58,6 +75,31 @@ export default function PortfolioTab({
     }));
     return calculatePortfolio(portfolioPositions);
   }, [positions]);
+
+  const yieldCurveData = useMemo(() => {
+    return positions
+      .map((pos, idx) => {
+        const result = portfolioResult.positionResults[idx];
+        if (!result || result.tir === null) return null;
+        return {
+          ticker: pos.bond.ticker,
+          yearsToMaturity: yearsToMaturity(pos.bond.maturityDate),
+          tir: result.tir,
+        };
+      })
+      .filter((d): d is NonNullable<typeof d> => d !== null);
+  }, [positions, portfolioResult]);
+
+  const distributionData = useMemo(() => {
+    return positions.map((pos, idx) => ({
+      ticker: pos.bond.ticker,
+      issuer: pos.bond.issuer,
+      currency: pos.bond.currency,
+      law: pos.bond.law,
+      marketValue: portfolioResult.positionResults[idx]?.marketValue || 0,
+      creditRating: pos.bond.creditRating,
+    }));
+  }, [positions, portfolioResult]);
 
   const handleAdd = async () => {
     if (!selectedBondId || !nominal || !dirtyPrice) return;
@@ -85,6 +127,32 @@ export default function PortfolioTab({
     setEditDirty(pos.dirtyPrice.toString());
   };
 
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch("/api/export");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `cartera-on-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!confirm("¿Borrar TODAS las posiciones? Esta acción no se puede deshacer.")) return;
+    setClearing(true);
+    try {
+      await onClearAll();
+    } finally {
+      setClearing(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Summary metrics */}
@@ -108,6 +176,34 @@ export default function PortfolioTab({
         />
       </div>
 
+      {/* Action buttons */}
+      {positions.length > 0 && (
+        <div className="flex gap-2">
+          <button
+            onClick={handleExport}
+            disabled={exporting}
+            className="rounded border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 disabled:opacity-50"
+          >
+            {exporting ? "Exportando..." : "Exportar Excel"}
+          </button>
+          <button
+            onClick={handleClearAll}
+            disabled={clearing}
+            className="rounded border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+          >
+            {clearing ? "Borrando..." : "Borrar Todo"}
+          </button>
+        </div>
+      )}
+
+      {/* Charts */}
+      {positions.length > 0 && (
+        <>
+          <YieldCurveChart data={yieldCurveData} />
+          <DistributionCharts positions={distributionData} />
+        </>
+      )}
+
       {/* Add position form */}
       <div className="rounded-lg border border-slate-200 bg-white p-4">
         <h3 className="mb-3 text-sm font-semibold text-slate-700">Agregar Posición</h3>
@@ -116,13 +212,14 @@ export default function PortfolioTab({
             <label className="mb-1 block text-xs text-slate-500">Especie</label>
             <select
               value={selectedBondId}
-              onChange={(e) => setSelectedBondId(e.target.value)}
+              onChange={(e) => handleBondSelect(e.target.value)}
               className="w-full rounded border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
             >
               <option value="">Seleccionar...</option>
               {bonds.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.ticker} — {b.issuer}
+                  {b.lastPrice ? ` (ARS ${b.lastPrice.toLocaleString("es-AR")})` : ""}
                 </option>
               ))}
             </select>

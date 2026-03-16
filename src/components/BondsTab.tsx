@@ -17,6 +17,8 @@ interface BondFormData {
   amortStartDate: string | null;
   amortPayments: number | null;
   customAmortSchedule: { date: string; pct: number }[] | null;
+  minDenomination: number | null;
+  creditRating: string | null;
 }
 
 interface Props {
@@ -24,6 +26,7 @@ interface Props {
   onCreateBond: (bond: BondFormData) => Promise<void>;
   onUpdateBond: (id: string, bond: BondFormData) => Promise<void>;
   onDeleteBond: (id: string) => Promise<void>;
+  onRefreshQuotes: () => Promise<void>;
 }
 
 const EMPTY_FORM = {
@@ -39,18 +42,20 @@ const EMPTY_FORM = {
   amortStartDate: "",
   amortPayments: "",
   customAmortText: "",
+  minDenomination: "",
+  creditRating: "",
 };
 
 function parseNumber(value: string): number {
-  // Handle both comma and dot as decimal separator
   return parseFloat(value.replace(",", "."));
 }
 
-export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBond }: Props) {
+export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBond, onRefreshQuotes }: Props) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const resetForm = () => {
     setForm(EMPTY_FORM);
@@ -79,6 +84,8 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
       amortStartDate: bond.amortStartDate?.slice(0, 10) || "",
       amortPayments: bond.amortPayments?.toString() || "",
       customAmortText: customSchedule,
+      minDenomination: bond.minDenomination?.toString() || "",
+      creditRating: bond.creditRating || "",
     });
     setEditingId(bond.id);
     setShowForm(true);
@@ -126,6 +133,8 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
         form.amortizationType === "custom"
           ? parseCustomAmort(form.customAmortText)
           : null,
+      minDenomination: form.minDenomination ? parseNumber(form.minDenomination) : null,
+      creditRating: form.creditRating || null,
     };
 
     try {
@@ -138,6 +147,15 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Error al guardar";
       setError(message);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await onRefreshQuotes();
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -160,14 +178,23 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
         <h3 className="text-sm font-semibold text-slate-700">
           Base de Obligaciones Negociables ({bonds.length})
         </h3>
-        {!showForm && (
+        <div className="flex gap-2">
           <button
-            onClick={() => setShowForm(true)}
-            className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="rounded border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
           >
-            + Nueva ON
+            {refreshing ? "Actualizando..." : "Actualizar Cotizaciones"}
           </button>
-        )}
+          {!showForm && (
+            <button
+              onClick={() => setShowForm(true)}
+              className="rounded bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              + Nueva ON
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Form */}
@@ -198,32 +225,23 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
               </select>
             </div>
 
-            {/* Ley */}
             <div>
               <label className="mb-1 block text-xs text-slate-500">Ley</label>
               <div className="flex gap-1">
-                <button
-                  type="button"
-                  onClick={() => setForm({ ...form, law: "NY" })}
-                  className={`flex-1 rounded border px-3 py-2 text-sm font-medium transition-colors ${
-                    form.law === "NY"
-                      ? "border-blue-600 bg-blue-600 text-white"
-                      : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  NY
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setForm({ ...form, law: "ARG" })}
-                  className={`flex-1 rounded border px-3 py-2 text-sm font-medium transition-colors ${
-                    form.law === "ARG"
-                      ? "border-blue-600 bg-blue-600 text-white"
-                      : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
-                  }`}
-                >
-                  ARG
-                </button>
+                {["NY", "ARG"].map((law) => (
+                  <button
+                    key={law}
+                    type="button"
+                    onClick={() => setForm({ ...form, law })}
+                    className={`flex-1 rounded border px-3 py-2 text-sm font-medium transition-colors ${
+                      form.law === law
+                        ? "border-blue-600 bg-blue-600 text-white"
+                        : "border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {law}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -255,6 +273,9 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
                 <option value="custom">Custom</option>
               </select>
             </div>
+
+            <Field label="Lámina Mínima (USD)" value={form.minDenomination} onChange={(v) => setForm({ ...form, minDenomination: v })} placeholder="1000" />
+            <Field label="Rating FIX SCR" value={form.creditRating} onChange={(v) => setForm({ ...form, creditRating: v })} placeholder="A(arg)" />
 
             {form.amortizationType === "equal" && (
               <>
@@ -309,13 +330,16 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
               <th className="px-4 py-3">Frecuencia</th>
               <th className="px-4 py-3">Vencimiento</th>
               <th className="px-4 py-3">Amortización</th>
+              <th className="px-4 py-3 text-right">Lámina Mín.</th>
+              <th className="px-4 py-3">Rating</th>
+              <th className="px-4 py-3 text-right">Cotización</th>
               <th className="px-4 py-3 text-center">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {bonds.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-8 text-center text-slate-400">
+                <td colSpan={12} className="px-4 py-8 text-center text-slate-400">
                   No hay ONs cargadas. Creá una nueva.
                 </td>
               </tr>
@@ -338,6 +362,27 @@ export default function BondsTab({ bonds, onCreateBond, onUpdateBond, onDeleteBo
                 <td className="px-4 py-3">{freqLabel[bond.couponFrequency] || `${bond.couponFrequency}x`}</td>
                 <td className="px-4 py-3">{formatDate(bond.maturityDate)}</td>
                 <td className="px-4 py-3">{amortLabel[bond.amortizationType] || bond.amortizationType}</td>
+                <td className="px-4 py-3 text-right">
+                  {bond.minDenomination != null
+                    ? bond.minDenomination.toLocaleString("es-AR")
+                    : "—"}
+                </td>
+                <td className="px-4 py-3">
+                  {bond.creditRating ? (
+                    <span className="inline-block rounded bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
+                      {bond.creditRating}
+                    </span>
+                  ) : "—"}
+                </td>
+                <td className="px-4 py-3 text-right">
+                  {bond.lastPrice != null ? (
+                    <span className="font-medium text-emerald-600">
+                      ARS {bond.lastPrice.toLocaleString("es-AR", { maximumFractionDigits: 2 })}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-center">
                   <div className="flex justify-center gap-1">
                     <button

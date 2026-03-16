@@ -25,6 +25,8 @@ export async function PUT(
       customAmortSchedule: body.customAmortSchedule
         ? JSON.stringify(body.customAmortSchedule)
         : null,
+      minDenomination: body.minDenomination ?? null,
+      creditRating: body.creditRating ?? null,
     },
   });
 

@@ -52,12 +52,19 @@ export function usePositions() {
     await fetchPositions();
   };
 
+  const clearAll = async () => {
+    const res = await fetch("/api/positions/clear", { method: "DELETE" });
+    if (!res.ok) throw new Error("Failed to clear positions");
+    await fetchPositions();
+  };
+
   return {
     positions,
     loading,
     addPosition,
     updatePosition,
     deletePosition,
+    clearAll,
     refetch: fetchPositions,
   };
 }

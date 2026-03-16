@@ -5,7 +5,7 @@ generator client {
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL") // needed for Neon serverless
+  directUrl = env("DIRECT_URL")
 }
 
 model Bond {
@@ -22,6 +22,10 @@ model Bond {
   amortStartDate        DateTime?  // for "equal" type
   amortPayments         Int?       // for "equal" type
   customAmortSchedule   String?    // JSON string for "custom" type: [{"date":"2028-06-30","pct":33.33},...]
+  minDenomination       Float?     // minimum investment amount (e.g. 1, 1000, 150000)
+  creditRating          String?    // FIX SCR credit rating (e.g. "AA", "A+", "BBB")
+  lastPrice             Float?     // last known price from market (ARS)
+  lastPriceDate         DateTime?  // when was lastPrice updated
   createdAt             DateTime   @default(now())
   updatedAt             DateTime   @updatedAt
   positions             Position[]

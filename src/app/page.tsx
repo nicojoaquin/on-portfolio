@@ -16,8 +16,13 @@ const TABS: { id: TabId; label: string }[] = [
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<TabId>("portfolio");
-  const { bonds, createBond, updateBond, deleteBond } = useBonds();
-  const { positions, addPosition, updatePosition, deletePosition } = usePositions();
+  const { bonds, createBond, updateBond, deleteBond, refetch: refetchBonds } = useBonds();
+  const { positions, addPosition, updatePosition, deletePosition, clearAll } = usePositions();
+
+  const refreshQuotes = async () => {
+    await fetch("/api/quotes");
+    await refetchBonds();
+  };
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-6">
@@ -56,6 +61,7 @@ export default function Home() {
           onAddPosition={addPosition}
           onUpdatePosition={updatePosition}
           onDeletePosition={deletePosition}
+          onClearAll={clearAll}
         />
       )}
       {activeTab === "coupons" && <CouponsTab positions={positions} />}
@@ -65,6 +71,7 @@ export default function Home() {
           onCreateBond={createBond}
           onUpdateBond={updateBond}
           onDeleteBond={deleteBond}
+          onRefreshQuotes={refreshQuotes}
         />
       )}
     </div>

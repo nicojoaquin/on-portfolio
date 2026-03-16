@@ -42,6 +42,8 @@ export async function POST(request: NextRequest) {
         customAmortSchedule: body.customAmortSchedule
           ? JSON.stringify(body.customAmortSchedule)
           : null,
+        minDenomination: body.minDenomination ?? null,
+        creditRating: body.creditRating ?? null,
       },
     });
 

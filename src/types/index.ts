@@ -12,6 +12,10 @@ export interface BondDTO {
   amortStartDate: string | null;
   amortPayments: number | null;
   customAmortSchedule: string | null;
+  minDenomination: number | null;
+  creditRating: string | null;
+  lastPrice: number | null;
+  lastPriceDate: string | null;
 }
 
 export interface PositionDTO {
@@ -20,6 +24,14 @@ export interface PositionDTO {
   nominal: number;
   dirtyPrice: number;
   bond: BondDTO;
+}
+
+export interface MarketQuote {
+  ticker: string;
+  lastPrice: number;
+  variation: number;
+  volume: number;
+  tir: number | null;
 }
 
 export type TabId = "portfolio" | "coupons" | "bonds";
