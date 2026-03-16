@@ -74,52 +74,55 @@ export async function GET() {
   for (const q of bolsarQuotes) quoteMap.set(q.ticker, q.lastPrice);
   for (const q of iolQuotes) quoteMap.set(q.ticker, q.lastPrice);
 
-  // Get existing bonds indexed by ticker
-  const existingBonds = await prisma.bond.findMany();
+  // Get existing tickers in one query
+  const existingBonds = await prisma.bond.findMany({ select: { ticker: true } });
   const existingTickers = new Set(existingBonds.map((b) => b.ticker));
 
-  let updated = 0;
-  let created = 0;
+  // Split into updates vs creates
+  const toUpdate: { ticker: string; price: number }[] = [];
+  const toCreate: { ticker: string; price: number }[] = [];
 
-  // Update existing bonds with new prices
-  for (const bond of existingBonds) {
-    const price = quoteMap.get(bond.ticker);
-    if (price !== undefined) {
-      await prisma.bond.update({
-        where: { id: bond.id },
-        data: { lastPrice: price, lastPriceDate: new Date() },
-      });
-      updated++;
-    }
-  }
-
-  // Auto-create new bonds from scraped data (ticker + price only, no terms)
-  const newBonds: { ticker: string; price: number }[] = [];
   for (const [ticker, price] of quoteMap) {
-    if (!existingTickers.has(ticker)) {
-      newBonds.push({ ticker, price });
+    if (existingTickers.has(ticker)) {
+      toUpdate.push({ ticker, price });
+    } else {
+      toCreate.push({ ticker, price });
     }
   }
 
-  if (newBonds.length > 0) {
+  // Bulk update existing bonds with a single raw SQL query
+  const now = new Date();
+  if (toUpdate.length > 0) {
+    const cases = toUpdate.map((b) => `WHEN '${b.ticker}' THEN ${b.price}`).join(" ");
+    const tickers = toUpdate.map((b) => `'${b.ticker}'`).join(",");
+    await prisma.$executeRawUnsafe(`
+      UPDATE "Bond"
+      SET "lastPrice" = CASE "ticker" ${cases} END,
+          "lastPriceDate" = $1,
+          "updatedAt" = $1
+      WHERE "ticker" IN (${tickers})
+    `, now);
+  }
+
+  // Bulk create new bonds in one query
+  if (toCreate.length > 0) {
     await prisma.bond.createMany({
-      data: newBonds.map((b) => ({
+      data: toCreate.map((b) => ({
         ticker: b.ticker,
         issuer: extractIssuer(b.ticker),
         lastPrice: b.price,
-        lastPriceDate: new Date(),
+        lastPriceDate: now,
         hasTerms: false,
       })),
       skipDuplicates: true,
     });
-    created = newBonds.length;
   }
 
   return NextResponse.json({
     totalScraped: quoteMap.size,
-    updated,
-    created,
-    total: existingBonds.length + created,
+    updated: toUpdate.length,
+    created: toCreate.length,
+    total: existingTickers.size + toCreate.length,
     sources: ["iol.invertironline.com", "bolsar.info"],
   });
 }
