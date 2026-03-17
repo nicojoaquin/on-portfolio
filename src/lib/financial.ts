@@ -357,6 +357,7 @@ export function calculatePortfolio(
       totalMarketValue: 0,
       portfolioTIR: null,
       weightedAvgTIR: null,
+      weightedModifiedDuration: null,
       totalFutureCashFlows: 0,
       detailedFlows: [],
       consolidatedFlows: [],
