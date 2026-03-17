@@ -318,6 +318,7 @@ export interface PortfolioResult {
     ticker: string;
     marketValue: number;
     tir: number | null;
+    modifiedDuration: number | null;
     nextPaymentDate: Date | null;
     nextPaymentAmount: number;
   }[];
@@ -325,7 +326,7 @@ export interface PortfolioResult {
 
 // ─── Modified Duration ────────────────────────────────────────────────────────
 
-function calculateModifiedDuration(
+export function calculateModifiedDuration(
   bond: BondParams,
   nominal: number,
   tir: number
@@ -399,10 +400,15 @@ export function calculatePortfolio(
     const futureFlows = flows.filter((f) => f.date >= today);
     const nextFlow = futureFlows.length > 0 ? futureFlows[0] : null;
 
+    const modifiedDuration = tir !== null
+      ? calculateModifiedDuration(pos.bond, pos.nominal, tir)
+      : null;
+
     positionResults.push({
       ticker: pos.bond.ticker,
       marketValue: mv,
       tir,
+      modifiedDuration,
       nextPaymentDate: nextFlow?.date || null,
       nextPaymentAmount: nextFlow?.total || 0,
     });

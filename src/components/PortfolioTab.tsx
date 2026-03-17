@@ -11,6 +11,7 @@ import {
 import { formatCurrency, formatPercent, formatDate, formatNumber } from "@/lib/formatters";
 import YieldCurveChart from "./YieldCurveChart";
 import DistributionCharts from "./DistributionCharts";
+import DurationChart from "./DurationChart";
 import BondSearch from "./BondSearch";
 
 function toBondParams(bond: BondDTO): BondParams | null {
@@ -100,6 +101,24 @@ export default function PortfolioTab({
           ticker: pos.bond.ticker,
           yearsToMaturity: yearsToMaturity(pos.bond.maturityDate),
           tir: result.tir,
+        };
+      })
+      .filter((d): d is NonNullable<typeof d> => d !== null);
+  }, [positions, portfolioResult, positionResultMap]);
+
+  const durationData = useMemo(() => {
+    return positions
+      .map((pos, idx) => {
+        const resultIdx = positionResultMap.get(idx);
+        if (resultIdx === undefined) return null;
+        const result = portfolioResult.positionResults[resultIdx];
+        if (!result || result.modifiedDuration === null) return null;
+        return {
+          ticker: pos.bond.ticker,
+          modifiedDuration: result.modifiedDuration,
+          weight: portfolioResult.totalMarketValue > 0
+            ? result.marketValue / portfolioResult.totalMarketValue
+            : 0,
         };
       })
       .filter((d): d is NonNullable<typeof d> => d !== null);
@@ -229,6 +248,12 @@ export default function PortfolioTab({
       {positions.length > 0 && (
         <>
           <YieldCurveChart data={yieldCurveData} />
+          {durationData.length > 0 && portfolioResult.weightedModifiedDuration !== null && (
+            <DurationChart
+              data={durationData}
+              portfolioDuration={portfolioResult.weightedModifiedDuration}
+            />
+          )}
           <DistributionCharts positions={distributionData} />
         </>
       )}

@@ -92,7 +92,7 @@ function DonutChart({
                   padding: "6px 10px",
                   boxShadow: "0 1px 6px rgba(0,0,0,0.08)",
                 }}
-                formatter={(value: number) => [fmt(value), ""]}
+                formatter={(value) => [fmt(Number(value)), ""]}
               />
             </PieChart>
           </ResponsiveContainer>
