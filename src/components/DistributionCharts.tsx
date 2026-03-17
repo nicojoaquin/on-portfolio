@@ -80,7 +80,6 @@ export default function DistributionCharts({ positions }: Props) {
   const byIssuer = groupBy(positions, "issuer");
   const byCurrency = groupBy(positions, "currency");
   const byLaw = groupBy(positions, "law");
-  const byRating = groupBy(positions, "creditRating");
 
   return (
     <div className="rounded-lg border border-slate-200 bg-white p-4">
@@ -91,7 +90,6 @@ export default function DistributionCharts({ positions }: Props) {
         <MiniPie data={byIssuer} title="Por Emisor" />
         <MiniPie data={byLaw} title="Por Ley" />
         {byCurrency.length > 1 && <MiniPie data={byCurrency} title="Por Moneda" />}
-        {byRating.length > 1 && <MiniPie data={byRating} title="Por Rating" />}
       </div>
     </div>
   );

@@ -177,7 +177,7 @@ export default function PortfolioTab({
   return (
     <div className="space-y-6">
       {/* Summary metrics */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <MetricCard
           label="Valor de Mercado"
           value={formatCurrency(portfolioResult.totalMarketValue)}
@@ -190,6 +190,14 @@ export default function PortfolioTab({
         <MetricCard
           label="TIR Prom. Ponderada"
           value={formatPercent(portfolioResult.weightedAvgTIR)}
+        />
+        <MetricCard
+          label="Duration Modificada"
+          value={
+            portfolioResult.weightedModifiedDuration !== null
+              ? `${portfolioResult.weightedModifiedDuration.toFixed(2)} años`
+              : "—"
+          }
         />
         <MetricCard
           label="Total Cobros Futuros"

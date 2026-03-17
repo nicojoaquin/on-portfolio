@@ -310,6 +310,7 @@ export interface PortfolioResult {
   totalMarketValue: number;
   portfolioTIR: number | null;
   weightedAvgTIR: number | null;
+  weightedModifiedDuration: number | null;
   totalFutureCashFlows: number;
   detailedFlows: DetailedCashFlow[];
   consolidatedFlows: DetailedCashFlow[];
@@ -320,6 +321,32 @@ export interface PortfolioResult {
     nextPaymentDate: Date | null;
     nextPaymentAmount: number;
   }[];
+}
+
+// ─── Modified Duration ────────────────────────────────────────────────────────
+
+function calculateModifiedDuration(
+  bond: BondParams,
+  nominal: number,
+  tir: number
+): number | null {
+  const flows = generateBondCashFlows(bond, nominal);
+  if (flows.length === 0) return null;
+
+  const today = toUTCDate(new Date());
+  let macaulayNumerator = 0;
+  let pv = 0;
+
+  for (const flow of flows) {
+    const t = yearFraction(today, flow.date);
+    const discounted = flow.total / Math.pow(1 + tir, t);
+    macaulayNumerator += t * discounted;
+    pv += discounted;
+  }
+
+  if (pv <= 0) return null;
+  const macaulayDuration = macaulayNumerator / pv;
+  return macaulayDuration / (1 + tir);
 }
 
 export function calculatePortfolio(
@@ -344,6 +371,8 @@ export function calculatePortfolio(
   const positionResults: PortfolioResult["positionResults"] = [];
   let weightedTirSum = 0;
   let tirWeightSum = 0;
+  let weightedDurSum = 0;
+  let durWeightSum = 0;
 
   for (const pos of positions) {
     const mv = pos.nominal * (pos.dirtyPrice / 100);
@@ -357,6 +386,12 @@ export function calculatePortfolio(
     if (tir !== null) {
       weightedTirSum += tir * mv;
       tirWeightSum += mv;
+
+      const md = calculateModifiedDuration(pos.bond, pos.nominal, tir);
+      if (md !== null) {
+        weightedDurSum += md * mv;
+        durWeightSum += mv;
+      }
     }
 
     // Next payment
@@ -385,6 +420,7 @@ export function calculatePortfolio(
 
   const portfolioTIR = xirr(portfolioCashFlows);
   const weightedAvgTIR = tirWeightSum > 0 ? weightedTirSum / tirWeightSum : null;
+  const weightedModifiedDuration = durWeightSum > 0 ? weightedDurSum / durWeightSum : null;
   const totalFutureCashFlows = allDetailedFlows.reduce((sum, f) => sum + f.total, 0);
   const consolidatedFlows = consolidateCashFlows(allDetailedFlows);
 
@@ -392,6 +428,7 @@ export function calculatePortfolio(
     totalMarketValue,
     portfolioTIR,
     weightedAvgTIR,
+    weightedModifiedDuration,
     totalFutureCashFlows,
     detailedFlows: allDetailedFlows.sort(
       (a, b) => a.date.getTime() - b.date.getTime()
